@@ -9,9 +9,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// --- Basic Auth (opcional, se activa si hay AUTH_USER + AUTH_PASS) ---
+// --- Auth con token (login propio, sin popup del navegador) ---
 const AUTH_USER = process.env.AUTH_USER;
 const AUTH_PASS = process.env.AUTH_PASS;
+const authEnabled = !!(AUTH_USER && AUTH_PASS);
+// Secreto para firmar tokens. Si no se define, se deriva del usuario/pass.
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ||
+  crypto.createHash('sha256').update(`${AUTH_USER || ''}:${AUTH_PASS || ''}:devtasks`).digest('hex');
+const TOKEN_TTL_MS = 1000 * 60 * 60 * 24 * 30; // sesion de 30 dias
 
 function safeEqual(a, b) {
   const ba = Buffer.from(a);
@@ -24,22 +30,58 @@ function safeEqual(a, b) {
   return crypto.timingSafeEqual(ba, bb);
 }
 
-if (AUTH_USER && AUTH_PASS) {
-  app.use((req, res, next) => {
-    const hdr = req.headers.authorization || '';
-    const [scheme, encoded] = hdr.split(' ');
-    if (scheme === 'Basic' && encoded) {
-      const [user, pass] = Buffer.from(encoded, 'base64').toString().split(':');
-      if (safeEqual(user || '', AUTH_USER) && safeEqual(pass || '', AUTH_PASS)) {
-        return next();
-      }
-    }
-    res.set('WWW-Authenticate', 'Basic realm="DevTasks"');
-    return res.status(401).send('Autenticacion requerida');
+// Token autocontenido: base64url(payload).hmac  (sin dependencias externas)
+function signToken(payload) {
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  const dot = token.lastIndexOf('.');
+  if (dot < 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = crypto.createHmac('sha256', SESSION_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString());
+    if (!payload.exp || Date.now() > payload.exp) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function tokenFromReq(req) {
+  return (req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+}
+
+// Login: valida credenciales y entrega un token
+app.post('/api/login', (req, res) => {
+  if (!authEnabled) {
+    // sin credenciales configuradas (dev): modo abierto
+    return res.json({ token: signToken({ u: 'dev', exp: Date.now() + TOKEN_TTL_MS }), user: 'dev' });
+  }
+  const { username, password } = req.body || {};
+  if (safeEqual(username || '', AUTH_USER) && safeEqual(password || '', AUTH_PASS)) {
+    return res.json({ token: signToken({ u: AUTH_USER, exp: Date.now() + TOKEN_TTL_MS }), user: AUTH_USER });
+  }
+  return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+});
+
+// Protege el resto de /api/* (todo lo definido despues de aca)
+if (authEnabled) {
+  app.use('/api', (req, res, next) => {
+    if (verifyToken(tokenFromReq(req))) return next();
+    return res.status(401).json({ error: 'No autorizado' });
   });
-  console.log('Basic Auth activado');
+  console.log('Auth por token activada');
 } else {
-  console.log('Basic Auth DESACTIVADO (define AUTH_USER y AUTH_PASS para activarlo)');
+  console.log('Auth DESACTIVADA (define AUTH_USER y AUTH_PASS para activarla)');
 }
 
 // --- DB setup ---

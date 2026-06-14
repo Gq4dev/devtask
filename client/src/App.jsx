@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const API = '/api';
+const TOKEN_KEY = 'devtasks_token';
+const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
 const PROJ_COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#a855f7', '#ef4444', '#84cc16'];
 const STATUSES = [
   { key: 'todo', label: 'Por hacer', glyph: 'todo' },
@@ -22,15 +24,26 @@ function fmtShort(sec) {
   return `${m}m`;
 }
 
-async function api(path, opts) {
+async function api(path, opts = {}) {
+  const token = getToken();
   const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(opts.headers || {})
+    }
   });
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    window.dispatchEvent(new Event('devtasks-unauthorized'));
+    throw new Error('unauthorized');
+  }
   return res.json();
 }
 
 export default function App() {
+  const [token, setToken] = useState(() => getToken());
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState([]);
@@ -56,7 +69,23 @@ export default function App() {
     setStats(s);
   }
 
-  useEffect(() => { loadAll(); }, []);
+  useEffect(() => { if (token) loadAll(); }, [token]);
+
+  // si el token expira o es invalido, volvemos al login
+  useEffect(() => {
+    const onUnauth = () => setToken('');
+    window.addEventListener('devtasks-unauthorized', onUnauth);
+    return () => window.removeEventListener('devtasks-unauthorized', onUnauth);
+  }, []);
+
+  function login(t) {
+    localStorage.setItem(TOKEN_KEY, t);
+    setToken(t);
+  }
+  function logout() {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken('');
+  }
 
   // live tick para cronometros corriendo
   useEffect(() => {
@@ -148,6 +177,8 @@ export default function App() {
   const openCount = visibleTasks.filter((t) => t.status !== 'done').length;
   const maxStat = Math.max(1, ...stats.map((s) => s.seconds));
 
+  if (!token) return <Login onLogin={login} />;
+
   return (
     <div>
       <div className="topbar">
@@ -165,6 +196,7 @@ export default function App() {
             <span className="t-name">Sin cronómetro activo</span>
           </div>
         )}
+        <button className="logout-btn" onClick={logout} title="Cerrar sesión">salir</button>
       </div>
 
       <div className="shell">
@@ -329,6 +361,58 @@ export default function App() {
           onClose={() => setEditProj(null)}
         />
       )}
+    </div>
+  );
+}
+
+function Login({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    if (!username || !password || loading) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await fetch(API + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error || 'No se pudo iniciar sesión');
+        setLoading(false);
+        return;
+      }
+      onLogin(data.token);
+    } catch {
+      setError('No se pudo conectar con el servidor');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="login-screen">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-brand"><span className="dot" />DevTasks</div>
+        <div className="login-sub">Iniciá sesión para continuar</div>
+        <div className="field">
+          <label>Usuario</label>
+          <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus autoComplete="username" />
+        </div>
+        <div className="field">
+          <label>Contraseña</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <button className="btn-primary login-btn" type="submit" disabled={loading}>
+          {loading ? 'Entrando…' : 'Entrar'}
+        </button>
+      </form>
     </div>
   );
 }
