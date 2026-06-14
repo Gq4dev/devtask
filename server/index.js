@@ -268,6 +268,87 @@ app.get('/api/stats', (req, res) => {
   res.json(result);
 });
 
+// --- Reportes ---
+// Tiempo por dia y proyecto en un rango. Se calcula con durationSeconds (mismo
+// criterio UTC que el resto de la app), agrupando en JS.
+app.get('/api/reports/daily', (req, res) => {
+  const { from, to } = req.query;
+  let q = `
+    SELECT e.*, t.project_id, p.name AS project_name, p.color
+    FROM time_entries e
+    JOIN tasks t ON t.id = e.task_id
+    JOIN projects p ON p.id = t.project_id
+    WHERE e.ended_at IS NOT NULL`;
+  const params = [];
+  if (from && to) {
+    q += ' AND date(e.started_at) BETWEEN ? AND ?';
+    params.push(from, to);
+  }
+  const rows = db.prepare(q).all(...params);
+  const map = new Map(); // clave: date|project_id
+  for (const e of rows) {
+    const date = e.started_at.slice(0, 10);
+    const key = `${date}|${e.project_id}`;
+    const cur =
+      map.get(key) ||
+      { date, project_id: e.project_id, project_name: e.project_name, color: e.color, seconds: 0 };
+    cur.seconds += durationSeconds(e);
+    map.set(key, cur);
+  }
+  res.json([...map.values()]);
+});
+
+// Resumen del periodo: total, desglose por proyecto y tareas sobre estimado.
+app.get('/api/reports/summary', (req, res) => {
+  const { from, to } = req.query;
+  const inRange = from && to;
+  const projects = db.prepare('SELECT * FROM projects ORDER BY id').all();
+  let total_seconds = 0;
+  let over_estimate_count = 0;
+
+  const by_project = projects.map((p) => {
+    const tasks = db.prepare('SELECT * FROM tasks WHERE project_id = ?').all(p.id);
+    let seconds = 0;
+    let estimate_min = 0;
+    let tasks_done = 0;
+    let tasks_open = 0;
+
+    for (const t of tasks) {
+      estimate_min += t.estimate_min || 0;
+
+      // tiempo registrado dentro del rango (entries cerradas)
+      const entries = db
+        .prepare(
+          'SELECT * FROM time_entries WHERE task_id = ? AND ended_at IS NOT NULL' +
+            (inRange ? ' AND date(started_at) BETWEEN ? AND ?' : '')
+        )
+        .all(...(inRange ? [t.id, from, to] : [t.id]));
+      seconds += entries.reduce((s, e) => s + durationSeconds(e), 0);
+
+      // estado de la tarea (done contabilizado si se cerro en el rango)
+      if (t.status === 'done') {
+        const doneInRange =
+          !inRange || (t.done_at && t.done_at >= from && t.done_at <= `${to} 23:59:59`);
+        if (doneInRange) tasks_done++;
+      } else {
+        tasks_open++;
+      }
+
+      // sobre estimado: tiempo total historico vs estimado
+      if (t.estimate_min > 0) {
+        const all = db.prepare('SELECT * FROM time_entries WHERE task_id = ?').all(t.id);
+        const allSeconds = all.reduce((s, e) => s + durationSeconds(e), 0);
+        if (allSeconds > t.estimate_min * 60) over_estimate_count++;
+      }
+    }
+
+    total_seconds += seconds;
+    return { project_id: p.id, name: p.name, color: p.color, seconds, estimate_min, tasks_done, tasks_open };
+  });
+
+  res.json({ total_seconds, by_project, over_estimate_count });
+});
+
 // --- Serve client build en produccion ---
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {

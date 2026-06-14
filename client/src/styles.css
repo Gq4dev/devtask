@@ -184,13 +184,386 @@ input, textarea, select { font-family: inherit; }
 .logout-btn { color: var(--text-faint); font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); }
 .logout-btn:hover { color: var(--red); border-color: rgba(248,81,73,0.3); }
 
-@media (max-width: 860px) {
-  .shell { grid-template-columns: 1fr; }
-  .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
-  .cols { grid-template-columns: 1fr; }
-  .active-timer .t-name { max-width: 100px; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none; }
+}
+
+/* ═══════════════════════════════════════════════
+   MOBILE — drawer sidebar + kanban responsive
+   ═══════════════════════════════════════════════ */
+
+/* Botón hamburger — oculto en desktop */
+.menu-btn {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  margin-right: 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+.menu-btn span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--text);
+  border-radius: 2px;
+}
+
+/* Overlay oscuro cuando sidebar está abierto */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 49;
+  backdrop-filter: blur(2px);
+}
+.sidebar-overlay.visible {
+  display: block;
+}
+
+@media (max-width: 860px) {
+  /* Mostrar hamburger */
+  .menu-btn {
+    display: flex;
+  }
+
+  /* Sidebar como drawer lateral */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -260px;
+    width: 260px;
+    height: 100vh;
+    z-index: 50;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding-top: 16px;
+  }
+  .sidebar.open {
+    left: 0;
+  }
+
+  /* Shell sin sidebar en el grid */
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* Kanban: scroll horizontal con snap */
+  .cols {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 12px;
+    padding: 0 4px 16px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .cols::-webkit-scrollbar {
+    display: none;
+  }
+  .col {
+    flex: 0 0 88vw;
+    scroll-snap-align: start;
+  }
+
+  /* Formulario nueva tarea apilado */
+  .new-task {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .new-task .title-in {
+    width: 100%;
+  }
+  .new-task .est-in {
+    width: 100%;
+  }
+  .new-task .add-btn {
+    width: 100%;
+  }
+
+  /* Botones touch-friendly: mínimo 44px */
+  .card-actions .icon-btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  /* stat-grid: 2 columnas en móvil */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Header cronómetro más compacto */
+  .active-timer .t-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR — tiempo acumulado por proyecto
+   ═══════════════════════════════════════════════ */
+.proj-time-mini {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: auto;
+  margin-right: 2px;
+}
+/* si hay tiempo, agrupamos tiempo + count a la derecha */
+.proj-item .proj-time-mini + .count {
+  margin-left: 0;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 16px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  color: var(--text-dim);
+  text-decoration: none;
+  font-size: 13px;
+  border-radius: 6px;
+  margin: 0 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.nav-link:hover {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+.nav-link.active {
+  background: var(--bg-elev-2);
+  color: var(--accent);
+}
+.nav-icon {
+  font-size: 14px;
+}
+
+/* ═══════════════════════════════════════════════
+   TASK CARD — confirmación borrar + progreso
+   ═══════════════════════════════════════════════ */
+.del-confirm {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-left: auto;
+}
+.icon-btn.danger {
+  color: var(--red);
+  border: 1px solid var(--red);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.icon-btn.danger:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* Barra de progreso estimado vs real */
+.progress-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+.progress-fill.over {
+  background: var(--red);
+}
+
+/* ═══════════════════════════════════════════════
+   REPORTES — página completa
+   ═══════════════════════════════════════════════ */
+.reports-loading,
+.reports-error {
+  padding: 48px;
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 15px;
+}
+.reports-error code {
+  font-family: var(--mono);
+  background: var(--bg-elev);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.reports-page {
+  padding: 28px 32px;
+  max-width: 1140px;
+}
+
+.reports-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.reports-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin-right: 8px;
+}
+
+/* Selector de rango */
+.range-tabs {
+  display: flex;
+  gap: 3px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+.range-tab {
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.range-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+.range-tab:hover:not(.active) {
+  background: var(--bg-elev-2);
+  color: var(--text);
+}
+
+.export-btn {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  transition: border-color 0.15s, color 0.15s;
+}
+.export-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* KPI cards */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.kpi-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.kpi-card.warn {
+  border-color: var(--amber);
+}
+.kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.kpi-value {
+  font-family: var(--mono);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* Chart cards */
+.charts-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.chart-card {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.chart-card:last-child {
+  margin-bottom: 0;
+}
+.chart-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.chart-empty {
+  color: var(--text-faint);
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+/* Tabla estimado vs real */
+.est-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.est-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.est-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.est-table tr:last-child td {
+  border-bottom: none;
+}
+.est-table td.mono {
+  font-family: var(--mono);
+}
+.est-table td.over  { color: var(--red); }
+.est-table td.under { color: var(--green); }
+
+/* Responsive reportes */
+@media (max-width: 860px) {
+  .reports-page  { padding: 16px; }
+  .kpi-row       { grid-template-columns: repeat(2, 1fr); }
+  .charts-row    { grid-template-columns: 1fr; }
+  .reports-header { gap: 10px; }
+  .export-btn    { margin-left: 0; }
 }

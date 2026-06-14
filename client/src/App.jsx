@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { API, TOKEN_KEY, api } from './api';
+import Reports from './pages/Reports';
 
-const API = '/api';
-const TOKEN_KEY = 'devtasks_token';
-const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
 const PROJ_COLORS = ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#06b6d4', '#a855f7', '#ef4444', '#84cc16'];
 const STATUSES = [
   { key: 'todo', label: 'Por hacer', glyph: 'todo' },
@@ -24,26 +24,12 @@ function fmtShort(sec) {
   return `${m}m`;
 }
 
-async function api(path, opts = {}) {
-  const token = getToken();
-  const res = await fetch(API + path, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers || {})
-    }
-  });
-  if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY);
-    window.dispatchEvent(new Event('devtasks-unauthorized'));
-    throw new Error('unauthorized');
-  }
-  return res.json();
-}
-
 export default function App() {
-  const [token, setToken] = useState(() => getToken());
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) || '');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [confirmDelId, setConfirmDelId] = useState(null);
   const [projects, setProjects] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [stats, setStats] = useState([]);
@@ -85,6 +71,11 @@ export default function App() {
   function logout() {
     localStorage.removeItem(TOKEN_KEY);
     setToken('');
+  }
+  function selectProject(id) {
+    setSelected(id);
+    setSidebarOpen(false);
+    if (location.pathname !== '/') navigate('/');
   }
 
   // live tick para cronometros corriendo
@@ -182,7 +173,12 @@ export default function App() {
   return (
     <div>
       <div className="topbar">
-        <div className="brand"><span className="dot" />DevTasks</div>
+        <button className="menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Abrir menú">
+          <span /><span /><span />
+        </button>
+        <div className="brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
+          <span className="dot" />DevTasks
+        </div>
         {runningTask ? (
           <div className="active-timer">
             <span className="pulse" />
@@ -200,31 +196,55 @@ export default function App() {
       </div>
 
       <div className="shell">
-        <aside className="sidebar">
+        <div
+          className={`sidebar-overlay ${sidebarOpen ? 'visible' : ''}`}
+          onClick={() => setSidebarOpen(false)}
+        />
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
           <div className="side-label">Proyectos</div>
           <button
-            className={`proj-item all ${selected === 'all' ? 'sel' : ''}`}
-            onClick={() => setSelected('all')}
+            className={`proj-item all ${selected === 'all' && location.pathname === '/' ? 'sel' : ''}`}
+            onClick={() => selectProject('all')}
           >
             <span className="swatch" style={{ background: 'var(--text-dim)' }} />
             Todos
             <span className="count">{tasks.filter((t) => t.status !== 'done').length}</span>
           </button>
-          {projects.map((p) => (
-            <button
-              key={p.id}
-              className={`proj-item ${selected === p.id ? 'sel' : ''}`}
-              onClick={() => setSelected(p.id)}
-              onDoubleClick={() => setEditProj(p)}
-            >
-              <span className="swatch" style={{ background: p.color }} />
-              {p.name}
-              <span className="count">{countByProject(p.id)}</span>
-            </button>
-          ))}
+          {projects.map((p) => {
+            const ps = stats.find((s) => s.project_id === p.id);
+            const mins = ps ? Math.round(ps.seconds / 60) : 0;
+            return (
+              <button
+                key={p.id}
+                className={`proj-item ${selected === p.id && location.pathname === '/' ? 'sel' : ''}`}
+                onClick={() => selectProject(p.id)}
+                onDoubleClick={() => setEditProj(p)}
+              >
+                <span className="swatch" style={{ background: p.color }} />
+                {p.name}
+                {mins > 0 && (
+                  <span className="proj-time-mini">
+                    {mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60 ? `${mins % 60}m` : ''}` : `${mins}m`}
+                  </span>
+                )}
+                <span className="count">{countByProject(p.id)}</span>
+              </button>
+            );
+          })}
           <button className="add-proj" onClick={() => setEditProj('new')}>+ Nuevo proyecto</button>
+          <div className="sidebar-divider" />
+          <Link
+            to="/reports"
+            className={`nav-link ${location.pathname === '/reports' ? 'active' : ''}`}
+            onClick={() => setSidebarOpen(false)}
+          >
+            <span className="nav-icon">📊</span>
+            Reportes
+          </Link>
         </aside>
 
+        <Routes>
+          <Route path="/" element={
         <main className="main">
           <div className="main-head">
             <h1>{headTitle}</h1>
@@ -253,7 +273,10 @@ export default function App() {
             </select>
             <input
               className="est-in"
-              placeholder="est min"
+              type="number"
+              min="1"
+              placeholder="min"
+              title="Estimación en minutos"
               value={ntEst}
               onChange={(e) => setNtEst(e.target.value.replace(/\D/g, ''))}
             />
@@ -297,6 +320,17 @@ export default function App() {
                             )}
                             {t.estimate_min > 0 && <span>est {t.estimate_min}m</span>}
                           </div>
+                          {t.estimate_min > 0 && t.tracked_seconds > 0 && (
+                            <div
+                              className="progress-bar"
+                              title={`${Math.round(t.tracked_seconds / 60)}m de ${t.estimate_min}m estimados`}
+                            >
+                              <div
+                                className={`progress-fill ${t.tracked_seconds > t.estimate_min * 60 ? 'over' : ''}`}
+                                style={{ width: `${Math.min((t.tracked_seconds / (t.estimate_min * 60)) * 100, 100)}%` }}
+                              />
+                            </div>
+                          )}
                           <div className="card-actions">
                             {st.key !== 'done' &&
                               (running ? (
@@ -316,7 +350,25 @@ export default function App() {
                             {st.key === 'done' && (
                               <button className="icon-btn" onClick={() => moveTask(t, 'doing')}>↺ reabrir</button>
                             )}
-                            <button className="icon-btn del" onClick={() => delTask(t.id)}>×</button>
+                            {confirmDelId === t.id ? (
+                              <span className="del-confirm">
+                                <button
+                                  className="icon-btn danger"
+                                  onClick={() => { delTask(t.id); setConfirmDelId(null); }}
+                                >
+                                  ✓ borrar
+                                </button>
+                                <button className="icon-btn" onClick={() => setConfirmDelId(null)}>cancel</button>
+                              </span>
+                            ) : (
+                              <button
+                                className="icon-btn del"
+                                onClick={() => setConfirmDelId(t.id)}
+                                title="Eliminar tarea"
+                              >
+                                ×
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -351,6 +403,9 @@ export default function App() {
             </div>
           </div>
         </main>
+          } />
+          <Route path="/reports" element={<Reports />} />
+        </Routes>
       </div>
 
       {editProj && (
