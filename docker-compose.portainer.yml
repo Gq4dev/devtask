@@ -16,16 +16,17 @@ services:
     ports:
       - "3001:3001"
     networks:
-      - traefik
+      - web
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.devtasks.rule=Host(`${APP_HOST}`)"
       - "traefik.http.routers.devtasks.entrypoints=web"
       - "traefik.http.services.devtasks.loadbalancer.server.port=3001"
+      - "traefik.docker.network=web"
 
 volumes:
   devtasks-data:
 
 networks:
-  traefik:
+  web:
     external: true
