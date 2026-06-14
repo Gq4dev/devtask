@@ -5,6 +5,7 @@
 services:
   devtasks:
     image: ghcr.io/gq4dev/devtask:latest
+    pull_policy: always
     container_name: devtasks
     restart: unless-stopped
     environment:
