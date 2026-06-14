@@ -1,0 +1,34 @@
+services:
+  devtasks:
+    build: .
+    image: devtasks:latest
+    container_name: devtasks
+    restart: unless-stopped
+    environment:
+      - AUTH_USER=${AUTH_USER}
+      - AUTH_PASS=${AUTH_PASS}
+      - DB_PATH=/data/devtasks.db
+    volumes:
+      - devtasks-data:/data
+    # Acceso directo por IP (fallback): http://IP-DEL-SERVER:3001
+    # Comenta este bloque si solo quieres entrar via Traefik.
+    ports:
+      - "3001:3001"
+    networks:
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      # Sin dominio: usamos nip.io (APP_HOST resuelve solo a tu IP, sin tocar DNS).
+      # Acceso: http://devtasks.TU-IP.nip.io
+      - "traefik.http.routers.devtasks.rule=Host(`${APP_HOST}`)"
+      - "traefik.http.routers.devtasks.entrypoints=web"
+      - "traefik.http.services.devtasks.loadbalancer.server.port=3001"
+
+volumes:
+  devtasks-data:
+
+networks:
+  # Red externa donde ya corre tu Traefik. Ajusta el nombre si no es "traefik"
+  # (revisa con: docker network ls). Suele llamarse traefik / proxy / web.
+  traefik:
+    external: true

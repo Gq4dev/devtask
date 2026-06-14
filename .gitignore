@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.db
+*.db-shm
+*.db-wal
+
+# Secretos y artefactos de deploy (NUNCA en repo publico)
+.env
+*.tgz

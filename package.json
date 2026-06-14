@@ -1,0 +1,23 @@
+{
+  "name": "devtasks",
+  "version": "1.0.0",
+  "description": "Task manager con time tracking para developers con multiples proyectos",
+  "scripts": {
+    "install:all": "npm install && cd client && npm install",
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node --no-warnings server/index.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "node --no-warnings server/index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  }
+}
