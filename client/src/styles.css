@@ -78,7 +78,7 @@ input, textarea, select { font-family: inherit; }
 .add-proj:hover { background: var(--bg-elev); color: var(--text-dim); }
 
 /* ---- Main ---- */
-.main { padding: 28px 32px; max-width: 1100px; }
+.main { padding: 28px 32px; max-width: 1100px; min-width: 0; }
 .main-head { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 4px; }
 .main-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.7px; }
 .main-head .edit-proj { font-size: 12px; color: var(--text-faint); font-family: var(--mono); }
@@ -298,12 +298,28 @@ input, textarea, select { font-family: inherit; }
     grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* Header cronómetro más compacto */
+  /* Header compacto y sin desbordes */
+  .topbar {
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  .active-timer {
+    padding: 6px 10px;
+    gap: 8px;
+    min-width: 0;
+  }
   .active-timer .t-name {
-    max-width: 120px;
+    max-width: 84px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .active-timer .t-time { font-size: 14px; }
+  .logout-btn { flex-shrink: 0; }
+
+  /* Menos padding lateral en el contenido */
+  .main {
+    padding: 18px 14px;
   }
 }
 
@@ -410,6 +426,7 @@ input, textarea, select { font-family: inherit; }
 .reports-page {
   padding: 28px 32px;
   max-width: 1140px;
+  min-width: 0;
 }
 
 .reports-header {
